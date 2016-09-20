@@ -43,6 +43,8 @@
 #' @return \code{proportions} A matrix with proportions of constituent cell
 #'   types in each input sample. Rows represent different samples. Columns
 #'   represent different cell types.
+#'
+#' @export
 run_edec_stage_1 <- function(meth_bulk_samples,
                       informative_loci,
                       num_cell_types,
@@ -114,6 +116,8 @@ run_edec_stage_1 <- function(meth_bulk_samples,
 #' @param cell_type_specific_meth Matrix of methylation profiles of constituent
 #'   cell types. Columns correspond to different cell types and rows correspond
 #'   to different loci/probes.
+#'
+#' @export
 estimate_props_qp <- function(meth_bulk_samples, cell_type_specific_meth) {
     num_cell_types <- ncol(cell_type_specific_meth)
     nMixtures <- ncol(meth_bulk_samples)
@@ -157,6 +161,8 @@ estimate_props_qp <- function(meth_bulk_samples, cell_type_specific_meth) {
 #' @param cell_type_props Matrix of proportions of constituent cell types.
 #'   Columns correspond to different cell types and rows correspond to different
 #'   bulk tissue samples.
+#'
+#' @export
 estimate_meth_qp <- function(meth_bulk_samples, cell_type_props) {
     num_cell_types <- ncol(cell_type_props)
     nLoci <- nrow(meth_bulk_samples)
@@ -201,6 +207,8 @@ estimate_meth_qp <- function(meth_bulk_samples, cell_type_props) {
 #' @param cell_type_props Matrix of proportions of constituent cell types.
 #'   Columns correspond to different cell types and rows correspond to different
 #'   bulk tissue samples.
+#'
+#' @export
 run_edec_stage_2 <- function(gene_exp_bulk_samples, cell_type_props) {
     gene_exp_bulk_samples <- as.matrix(gene_exp_bulk_samples)
 
