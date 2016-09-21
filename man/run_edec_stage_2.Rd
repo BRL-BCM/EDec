@@ -15,6 +15,26 @@ to different loci/probes.}
 Columns correspond to different cell types and rows correspond to different
 bulk tissue samples.}
 }
+\value{
+A list with the following components:
+
+\describe{
+   \item{\code{means}}{A matrix with the estimated average gene expression
+   profiles of constituent cell types. Rows correspond to different genes.
+   Columns correspond to different cell types.} \item{\code{std.errors}}{A
+   matrix with estimated standard errors for each cell type specific gene
+   expression estimate. Rows correspond to different genes. Columns
+   correspond to different cell types.}
+   \item{\code{degrees.of.freedom}}{Number of degrees of freedom for
+   estimates of cell type specific gene expression}
+   \item{\code{explained.variances}}{Vector with the proportion of variance
+   in input expression of each gene across samples explained by the final
+   model.} \item{\code{residuals}}{Matrix with the difference between the
+   original gene expression values and the linear combination between
+   proportions of constituent cell types and gene expression profiles of
+   constituent cell types.}
+ }
+}
 \description{
 This function implements the second stage of the EDec method. It takes as
 input the gene expression profiles of complex tissue samples, and the

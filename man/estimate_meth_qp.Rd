@@ -2,7 +2,7 @@
 % Please edit documentation in R/EDec.R
 \name{estimate_meth_qp}
 \alias{estimate_meth_qp}
-\title{Estimate methylation profiles of constituent cell types}
+\title{Estimate cell type specific methylation}
 \usage{
 estimate_meth_qp(meth_bulk_samples, cell_type_props)
 }
@@ -14,6 +14,10 @@ to different loci/probes.}
 \item{cell_type_props}{Matrix of proportions of constituent cell types.
 Columns correspond to different cell types and rows correspond to different
 bulk tissue samples.}
+}
+\value{
+Matrix with estimated average methylation profiles of constituent
+  cell types.
 }
 \description{
 Given methylation profiles of complex tissue samples and propotions of

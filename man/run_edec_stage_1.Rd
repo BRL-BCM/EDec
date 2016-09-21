@@ -27,13 +27,24 @@ of the model in two consecutive iterations for the algorithm to converge.}
 \value{
 A list with the following components:
 
-\code{methylation} A matrix with average methylation profiles of
+\describe{
+ \item{\code{methylation}}{A matrix with average methylation profiles of
   constituent cell types. Rows represent different loci/probes and columns
-  represent different cell types.
-
-\code{proportions} A matrix with proportions of constituent cell
+  represent different cell types.}
+ \item{\code{proportions}}{A matrix with proportions of constituent cell
   types in each input sample. Rows represent different samples. Columns
-  represent different cell types.
+  represent different cell types.}
+ \item{\code{iterations}}{Number of iterations the method went through before
+reaching convergence or maximum number of iterations.}
+ \item{\code{explained.variance}}{Proportion of variance in input methylation
+  profiles over informative loci explained by the final model.}
+ \item{\code{res.sum.squares}}{Residual sum of squares for the final model
+  over the set of informative loci.}
+ \item{\code{aic}}{Akaike Information Criterion for the final model over the
+  set of informative loci.}
+ \item{\code{rss.per.iteration}}{Vector of residual sum of squares for the
+  models generated in each iteration of the algorithm.}
+ }
 }
 \description{
 \code{run_edec_stage_1} takes as input the methylation profiles of complex tissue

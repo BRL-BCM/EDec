@@ -8,12 +8,16 @@ estimate_props_qp(meth_bulk_samples, cell_type_specific_meth)
 }
 \arguments{
 \item{meth_bulk_samples}{Matrix of methylation profiles of bulk complex
-tissue samples. Columns correspond to different samples and rows correspond
+  tissue samples. Columns correspond to different samples and rows correspond
 to different loci/probes.}
 
 \item{cell_type_specific_meth}{Matrix of methylation profiles of constituent
 cell types. Columns correspond to different cell types and rows correspond
 to different loci/probes.}
+}
+\value{
+Matrix with estimated proportions of constituent cell types in each
+  sample.
 }
 \description{
 This function will estimate the proportions of constituent cell types in
