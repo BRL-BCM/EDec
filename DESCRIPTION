@@ -7,7 +7,7 @@ Description: EDec (Epigenomic Deconvolution) is a technique that,
   tissue samples, infers cell type composition of each input sample
   as well as DNA methylation and gene transcription profiles of constituent cell types.
 Depends: R (>= 3.1.2)
-License: MIT
+License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
 Imports: quadprog,
