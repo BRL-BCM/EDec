@@ -11,5 +11,8 @@ License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
 Imports: quadprog,
-    gtools
+    gtools,
+    stats,
+    utils
 RoxygenNote: 5.0.1.9000
+Suggests: EDecExampleData

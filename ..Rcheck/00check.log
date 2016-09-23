@@ -1,0 +1,9 @@
+* using log directory ‘/Users/vitoronuchic/Projects/EDec/..Rcheck’
+* using R version 3.3.1 (2016-06-21)
+* using platform: x86_64-apple-darwin13.4.0 (64-bit)
+* using session charset: UTF-8
+* checking for file ‘./DESCRIPTION’ ... ERROR
+Required fields missing or empty:
+  ‘Author’ ‘Maintainer’
+* DONE
+Status: 1 ERROR

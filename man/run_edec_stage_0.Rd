@@ -51,4 +51,19 @@ instead of comparing one class of references against all others as is done in
 "one.vs.rest" version, the "each.pair" version will perform comparisons
 between each pair of reference classes.
 }
+\examples{
+if (requireNamespace("EDecExampleData",quietly=TRUE)) {
+  informative_loci <-
+    run_edec_stage_0(reference_meth = EDecExampleData::reference_meth,
+                     reference_classes = EDecExampleData::reference_meth_class,
+                     max_p_value = 1e-5,
+                     num_markers = 500,
+                     version = "one.vs.rest")
+} else {
+  print("To run this example, please install EDecExampleData package from
+    github by running devtools::install_github('BRL-BCM/EDecExampleData')")
+}
+
+
+}
 

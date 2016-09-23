@@ -4,7 +4,7 @@
 \alias{perform_t_tests_all_rows}
 \title{T-tests for comparing all rows of two matrices}
 \usage{
-perform_t_tests_all_rows(dataGroup1, dataGroup2)
+perform_t_tests_all_rows(data_group_1, data_group_2)
 }
 \arguments{
 \item{data_group_1}{A matrix of numbers.}

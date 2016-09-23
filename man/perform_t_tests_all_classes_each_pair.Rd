@@ -4,7 +4,7 @@
 \alias{perform_t_tests_all_classes_each_pair}
 \title{Comparison of each pair of classes}
 \usage{
-perform_t_tests_all_classes_each_pair(dataMatrix, classVector)
+perform_t_tests_all_classes_each_pair(data_matrix, class_vector)
 }
 \arguments{
 \item{data_matrix}{Matrix containing the data for all samples. Columns

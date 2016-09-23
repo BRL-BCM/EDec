@@ -36,6 +36,20 @@
 #'
 #' @return A vector with the names of the loci/probes selected as markers.
 #'
+#' @examples
+#' if (requireNamespace("EDecExampleData",quietly=TRUE)) {
+#'   informative_loci <-
+#'     run_edec_stage_0(reference_meth = EDecExampleData::reference_meth,
+#'                      reference_classes = EDecExampleData::reference_meth_class,
+#'                      max_p_value = 1e-5,
+#'                      num_markers = 500,
+#'                      version = "one.vs.rest")
+#' } else {
+#'   print("To run this example, please install EDecExampleData package from
+#'     github by running devtools::install_github('BRL-BCM/EDecExampleData')")
+#' }
+#'
+#'
 #' @export
 run_edec_stage_0 <- function(reference_meth,
                              reference_classes,
@@ -75,11 +89,11 @@ run_edec_stage_0 <- function(reference_meth,
                                     max_p_value))
     significant_loci <- setdiff(significant_loci, markers)
     hyper_loci <-
-      names(tail(sort(t_test_results$diff.means[significant_loci,i]),
+      names(utils::tail(sort(t_test_results$diff.means[significant_loci,i]),
                  num_hyper_markers_per_comp))
 
     hypo_loci <-
-      names(head(sort(t_test_results$diff.means[significant_loci,i]),
+      names(utils::head(sort(t_test_results$diff.means[significant_loci,i]),
                  num_hyper_markers_per_comp))
 
     markers <- c(markers, hyper_loci, hypo_loci)
@@ -89,7 +103,7 @@ run_edec_stage_0 <- function(reference_meth,
 
   if (num_extra_markers > 0) {
     min_p_values <- apply(t_test_results$p.values[markers, ], 1, min)
-    markers_to_drop <- tail(sort(min_p_values, index.return=TRUE)$ix,
+    markers_to_drop <- utils::tail(sort(min_p_values, index.return=TRUE)$ix,
                             num_extra_markers)
     markers <- markers[-markers_to_drop]
   }
@@ -112,12 +126,12 @@ run_edec_stage_0 <- function(reference_meth,
 #'   first column contains the p-values, the second column contains the means of
 #'   data_group_1 for each row, and the third column contains the means of
 #'   data_group_2 for each row.
-perform_t_tests_all_rows = function(dataGroup1, dataGroup2){
-  nGroup1 = ncol(dataGroup1)
-  nGroup2 = ncol(dataGroup2)
-  dataAll = cbind(dataGroup1, dataGroup2)
+perform_t_tests_all_rows = function(data_group_1, data_group_2){
+  nGroup1 = ncol(data_group_1)
+  nGroup2 = ncol(data_group_2)
+  dataAll = cbind(data_group_1, data_group_2)
   tTestWithErrorHandling = function(x){
-    testResult = try(t.test(x[1:nGroup1],
+    testResult = try(stats::t.test(x[1:nGroup1],
                             x[(nGroup1 + 1):(nGroup1 + nGroup2)]),
                      silent=TRUE);
     if (is.character(testResult)) {
@@ -130,7 +144,7 @@ perform_t_tests_all_rows = function(dataGroup1, dataGroup2){
   results = matrix(unlist(apply(dataAll, 1, tTestWithErrorHandling)), ncol=3,
                    byrow=TRUE)
   colnames(results) = c("P.value", "Mean.group.1", "Mean.group.2")
-  rownames(results) = rownames(dataGroup1)
+  rownames(results) = rownames(data_group_1)
   return(results)
 }
 
@@ -156,26 +170,26 @@ perform_t_tests_all_rows = function(dataGroup1, dataGroup2){
 #'     to the comparison between a class and all others.
 #'   }
 #' }
-perform_t_tests_all_classes_one_vs_rest = function(dataMatrix, classVector){
+perform_t_tests_all_classes_one_vs_rest = function(data_matrix, class_vector){
 
-  if (ncol(dataMatrix) != length(classVector)) {
+  if (ncol(data_matrix) != length(class_vector)) {
     stop("Number of columns of data matrix must be equal to the length of the
          class vector")
   }
-  possibleClasses = unique(classVector)
+  possibleClasses = unique(class_vector)
   nClasses = length(possibleClasses)
 
-  allPvalues = matrix(NA, nrow = nrow(dataMatrix), ncol = nClasses)
-  allDiffMeans = matrix(NA, nrow = nrow(dataMatrix), ncol = nClasses)
+  allPvalues = matrix(NA, nrow = nrow(data_matrix), ncol = nClasses)
+  allDiffMeans = matrix(NA, nrow = nrow(data_matrix), ncol = nClasses)
   colnames(allPvalues) = possibleClasses
-  rownames(allPvalues) = rownames(dataMatrix)
+  rownames(allPvalues) = rownames(data_matrix)
   colnames(allDiffMeans) = possibleClasses
-  rownames(allDiffMeans) = rownames(dataMatrix)
+  rownames(allDiffMeans) = rownames(data_matrix)
 
   for (i in 1:nClasses) {
     class = possibleClasses[i]
-    resultTest = perform_t_tests_all_rows(dataMatrix[ ,classVector == class],
-                                          dataMatrix[ ,classVector != class])
+    resultTest = perform_t_tests_all_rows(data_matrix[ ,class_vector == class],
+                                          data_matrix[ ,class_vector != class])
     allPvalues[ ,i] = resultTest[ ,1]
     allDiffMeans[ ,i] = resultTest[ ,2] - resultTest[ ,3]
   }
@@ -207,12 +221,12 @@ perform_t_tests_all_classes_one_vs_rest = function(dataMatrix, classVector){
 #'     corresponds to the comparison between a pair of classes.
 #'   }
 #' }
-perform_t_tests_all_classes_each_pair = function(dataMatrix, classVector){
-  if (ncol(dataMatrix)!=length(classVector)) {
+perform_t_tests_all_classes_each_pair = function(data_matrix, class_vector){
+  if (ncol(data_matrix)!=length(class_vector)) {
     stop("Number of columns of data matrix must be equal to the length
          of the class vector")
   }
-  possibleClasses = unique(classVector)
+  possibleClasses = unique(class_vector)
   nClasses = length(possibleClasses)
 
   allPValues = NULL
@@ -223,8 +237,8 @@ perform_t_tests_all_classes_each_pair = function(dataMatrix, classVector){
       class1 = possibleClasses[i]
       class2 = possibleClasses[j]
       names = c(names, paste(class1, class2, sep="."))
-      result = perform_t_tests_all_rows(dataMatrix[ ,classVector == class1],
-                                        dataMatrix[ ,classVector == class2])
+      result = perform_t_tests_all_rows(data_matrix[ ,class_vector == class1],
+                                        data_matrix[ ,class_vector == class2])
       allPValues = cbind(allPValues, result[ ,1])
       allDiffMeans = cbind(allDiffMeans, result[ ,2] / result[ ,3])
     }

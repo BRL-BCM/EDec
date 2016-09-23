@@ -4,7 +4,7 @@
 \alias{perform_t_tests_all_classes_one_vs_rest}
 \title{Comparison of one class against all others}
 \usage{
-perform_t_tests_all_classes_one_vs_rest(dataMatrix, classVector)
+perform_t_tests_all_classes_one_vs_rest(data_matrix, class_vector)
 }
 \arguments{
 \item{data_matrix}{Matrix containing the data for all samples. Columns
