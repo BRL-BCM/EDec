@@ -12,3 +12,6 @@ You can install `EDec` straght from github. To install it:
 **3**. Load the `EDec` package.
 
     library(EDec)
+
+#EDec user manual
+The manual for the EDec package can be found [here](https://github.com/BRL-BCM/EDec/raw/master/doc/EDec-manual.pdf "EDec manual").
