@@ -7,7 +7,7 @@ You can install `EDec` straght from github. To install it:
     
 **2**. Install the `EDec` package.
 
-    devtools::install.github("BRL-BCM/EDec")
+    devtools::install_github("BRL-BCM/EDec")
     
 **3**. Load the `EDec` package.
 
