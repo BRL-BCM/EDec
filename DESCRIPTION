@@ -13,6 +13,12 @@ LazyData: true
 Imports: quadprog,
     gtools,
     stats,
+    clue,
     utils
 RoxygenNote: 5.0.1.9000
-Suggests: EDecExampleData
+Suggests: EDecExampleData,
+    RColorBrewer,
+    knitr,
+    rmarkdown,
+    gplots
+VignetteBuilder: knitr

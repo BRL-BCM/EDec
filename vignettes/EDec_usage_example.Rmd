@@ -1,0 +1,541 @@
+---
+title: "EDec usage example"
+author: "Vitor Onuchic"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_document
+vignette: >
+  %\VignetteIndexEntry{EDec usage example}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+## Introduction
+
+In this vignette I will demonstrate an example of how EDec can be used to deconvolute methylation and expression profiles of a set of samples of complex tissues (mixtures of cell types). In this context, deconvoluting means estimating proportions of constituent cell types in each tissue sample, as well as mean methylation and expression profiles of constituent cell types.
+
+In this example we will use the data package EDecExampleData. In that dataset you will find methylation and gene expression profiles of in silico simulated mixtures of different cell types. Note that even though the mixing of methylation and expresion profiles was done in silico, the methylation and expression profiles of the cell types that constitute those mixtures were generated experimentally. The advantage of an example dataset with simulated mixtures of cell types is that we know the true proportions of constituent cell types as well as the true mean methylation and expression profiles of each of the constituent cell types. These are all available in the EDecExampleData package, and can be used to assess EDec's performance and to better illustrate how EDec works. 
+
+Another important part of this dataset is the set of reference methylation profiles. Such profiles come from cell types that are from the same class as those used to build the mixed samples, but are not the same cell type (e.g. different breast cancer cell line). That is supposed to illustrate the fact that methylation profiles for cell types that are similar to the likely constituents of a tissue can often be found in the public domain, and can be gathered by the potential EDec user. However, such profiles do not perfectly represent the true constituent cell types of the tissue sample. As we will see, EDec makes indirect use of such reference methylation profiles in a way that leverages their similarity to true constituent cell types, while not fully relying on them for deconvolution.
+
+For more details on the example dataset its [reference manual](https://github.com/BRL-BCM/EDecExampleData/raw/master/doc/EDecExampleData-manual.pdf "EDecExampleData manual").
+
+## EDec stage 0 - Selecting loci that define cell type identity
+
+The first step when using EDec should be to identify a set of loci that displays distinct methylation profiles across the different constituent cell types of the tissue being analyzed. Since, in general, the methylation profiles of constituent cell types of a tissue are not known, one can use methylation profiles of cell types that are likely similar to those that consitute the tissue to inform this step. We will refer to those as reference methylation profiles. As an example of reference methylation profiles, think of using methylation profiles of breast cancer cell lines (available in public archives) as surrogates for those of true cancerous epithelial constituents of breast cancer tissue samples (not easily accessible). 
+
+In the EDec example dataset we have four classes of reference methylation profiles: cancerous epithelial cells, normal epithelial cells, stromal cells, and immune cells. Hierarchical clustering of references based on the pairwise Pearson correlations between their methylation profiles shows that references in the same class tend to have more similar methylation profiles than reference in different classes.
+
+```{r, fig.height = 7, fig.width = 7}
+# Create a vector of colors representing the class of each reference
+ref_class_colors <- as.factor(EDecExampleData::reference_meth_class)
+levels(ref_class_colors) <- RColorBrewer::brewer.pal(4,"Accent")
+ref_class_colors <- as.character(ref_class_colors)
+
+# Create a color gradient to be used in a heatmap of correlations
+color_gradient <- colorRampPalette(c("white","steelblue"))
+
+# Compute correlation matrix and draw a heatmap
+cors_ref_meth <- cor(EDecExampleData::reference_meth)
+gplots::heatmap.2(cors_ref_meth,
+                  trace="none",
+                  col=color_gradient(10),
+                  breaks=seq(0,1,0.1),
+                  margins=c(10,10),
+                  ColSideColors = ref_class_colors,
+                  RowSideColors = ref_class_colors)
+```
+
+Note in the image above that despite the fact that references tend to cluster by class (cell type), there is still a high level of correlation between methylation profiles of references in different classes. Note that the same is true if we compare the methylation profiles of the cell types used to create the cell type mixtures in the EDecExampleData package.
+
+```{r, fig.height = 7, fig.width = 7}
+cors_true_meth <- cor(EDecExampleData::true_cell_type_meth)
+gplots::heatmap.2(cors_true_meth,
+                  trace="none",
+                  col=color_gradient(10),
+                  breaks=seq(0,1,0.1),
+                  margins=c(12,12))
+```
+
+For EDec to be able to accurately estimate cell type proportions in tissue samples, it is important for the methylation profiles of the different constituent cell types to be highly distinct. With that in mind, one can specifically select a set of loci in which the methylation levels of different cell types are particularly distinct. The EDec packge provides a method to help with this selection (`run_edec_stage_0`). That method will perform locus specific T-tests comparing reference groups. It will then select loci that are particularly hyper- or hypo-methylated in each class of references. The user must specify the maximum p-value for a locus to potentially be included in the final set, and the number of marker loci to be selected. Also, the user must specify whether the method should compare the samples in one class of references against all other samples, or if the comparisons should be made for each pair of reference classes.
+
+```{r}
+# Selecting marker loci based on comparisons of each class of reference against
+# all other samples
+markers_ovr <- 
+  EDec::run_edec_stage_0(reference_meth = EDecExampleData::reference_meth,
+                         reference_classes = EDecExampleData::reference_meth_class,
+                         max_p_value = 1e-5,
+                         num_markers = 500,
+                         version = "one.vs.rest")
+
+# Selecting marker loci based on comparisons of between each pair of 
+# reference classes
+markers_ep <- 
+  EDec::run_edec_stage_0(reference_meth = EDecExampleData::reference_meth,
+                         reference_classes = EDecExampleData::reference_meth_class,
+                         max_p_value = 1e-5,
+                         num_markers = 500,
+                         version = "each.pair")
+```
+
+
+Once a set of marker loci is seleted, one should check whether it really makes different classes of references highly dissimilar. Stability of methylation profiles within each class is also beneficial.
+
+```{r, fig.height = 7, fig.width = 7}
+cors_ref_meth_markers_ovr <- cor(EDecExampleData::reference_meth[markers_ovr,])
+gplots::heatmap.2(cors_ref_meth_markers_ovr,
+                  trace="none",
+                  col=color_gradient(10),
+                  breaks=seq(0,1,0.1),
+                  margins=c(10,10),
+                  ColSideColors = ref_class_colors,
+                  RowSideColors = ref_class_colors)
+```
+
+```{r, fig.height = 7, fig.width = 7}
+cors_ref_meth_markers_ep <- cor(EDecExampleData::reference_meth[markers_ep,])
+gplots::heatmap.2(cors_ref_meth_markers_ep,
+                  trace="none",
+                  col=color_gradient(10),
+                  breaks=seq(0,1,0.1),
+                  margins=c(10,10),
+                  ColSideColors = ref_class_colors,
+                  RowSideColors = ref_class_colors)
+```
+
+Note that, as expected, the separation between classes greatly improved after selection of appropriate markers. Also note that, in this case the set of markers generated with the "one.vs.rest" version of the method seems to give better separation of reference classes than the set generated with the "each.pair" version.
+
+Now let's see whether the marker set selected based on comparisons of reference methylation profiles indeed leads to good separation of the true methylation profiles used to build the cell type mixtures.
+
+```{r, fig.height = 7, fig.width = 7}
+cors_true_meth_markers_ovr <- cor(EDecExampleData::true_cell_type_meth[markers_ovr,])
+gplots::heatmap.2(cors_true_meth_markers_ovr,
+                  trace="none",
+                  col=color_gradient(10),
+                  breaks=seq(0,1,0.1),
+                  margins=c(12,12))
+```
+
+In the figure above, we can see that the markers selected based on references led to good separation between most true methylation profiles of constituent cell types. This shows that even though reference methylation profiles are somewhat distinct from the true constituent cell types of the tissue, they can still be informative for selection of distinguishing features. Note, however, that the similarity between cancer immune and normal immune, and between cancer stroma and normal stroma remained high. This illustrates the fact that if your reference methylation profiles are not specific enough, as is the case here, it may not be possible to separate certain cell types.
+
+## EDec stage 1 - Deconvolution of methylation profiles
+
+Now that a set of informative loci was selected using EDec stage 0, we are ready to move to the next stage. EDec stage 1 is the core part of the EDec technique. It takes as input the set of loci with cell type specific methylation patterns, the methylation profiles of bulk tissue samples (mixtures of cell types), and the number of constituent cell types. From that, it estimates the mean methylation profiles of constituent cell types as well as the proportions of each constituent cell type in each mixed sample.
+
+Choosing the ideal number of constituent cell types to use in EDec stage 1 can be tricky. In the previous section we saw that two different cell types can sometimes have nearly identical methylation profiles over a particular set of loci (e.g. cancer immune and normal immune cell types are very similar over the selected set of marker loci). In that case, EDec would likely interpret them as a single cell type. Also, a particular cell type can have high variability in its methylation profile across the input bulk tissue samples (e.g. cancerous epithelial cell type in different breast cancer subtypes). In that case, EDec may interpret that cell type as two or more different types of cells. We recommend running EDec stage 1 with different numbers of cell types to see which number gives a model that is interpratable, reproducible, and that has good fit to the data.
+
+In this simulated example, we know that the true number of constituent cell types in the dataset is 6. We also know that, over the set of marker loci we chose, the cancer immune and normal immune cell types have very similar methylation profiles, and the same is true for cancer stroma and normal stroma cell types. Further, the cancer epithelial cell type has a more variable methylation profile than all other cell types. We will run the analysis with the 4 cell type model, and will later show how that model compares with the models with 3 or 6 cell types. 
+
+### Deconvolution with 4 cell types
+
+```{r, fig.height=7, fig.width=7}
+# Run EDec stage 1 with 4 cell types using the markers_ovr loci
+set.seed(1)
+stage1_result_4ct = 
+  EDec::run_edec_stage_1(meth_bulk_samples = EDecExampleData::meth_mixtures, 
+                         informative_loci = markers_ovr, 
+                         num_cell_types = 4)
+
+dim(stage1_result_4ct$methylation)
+
+stage1_result_4ct$methylation[1:10,]
+
+dim(stage1_result_4ct$proportions)
+
+stage1_result_4ct$proportions[1:10,]
+```
+
+The output of the stage 1 method is a list containing the matrix of estimated methylation profiles of constituent cell types, and a matrix of estimated proportions of constituent cell types. Notice that we do not know, at first, what cell types correspond to each of the estimated methylation profiles. We can get insights into that by comparing the estimated methylation profiles against the reference methylation profiles. 
+
+```{r, fig.height=7, fig.width=7}
+# Compute correlation between estimated methylation profiles,
+# and reference methylation profiles
+cors_deconv_refs_4ct = cor(EDecExampleData::reference_meth[markers_ovr,],
+                           stage1_result_4ct$methylation[markers_ovr,])
+
+# Check what references had the highest correlation with each 
+# of the estimated methylation profiles 
+best_cors = rbind(apply(cors_deconv_refs_4ct,2,which.max),
+                  apply(cors_deconv_refs_4ct,2,max))
+
+best_cor_labels = matrix("",nrow=nrow(cors_deconv_refs_4ct),
+                    ncol=ncol(cors_deconv_refs_4ct))
+for (i in 1:4){
+  best_cor_labels[best_cors[1,i],i] = as.character(round(best_cors[2,i],2))
+}
+
+# Plot correlation matrix
+gplots::heatmap.2(cors_deconv_refs_4ct,
+                  trace="none",
+                  col=color_gradient(10),
+                  breaks=seq(0,1,0.1),
+                  margins=c(4,12),
+                  RowSideColors = ref_class_colors,
+                  cellnote = best_cor_labels,
+                  notecol="black")
+```
+
+In this case, we can see that the estimated methylation profile number 4 had highest correlations against immune references. Profile number 2 correlated highly with stromal references. Profile number 3 had high correlation with normal epithelial references. Finally, profile number 1 had its highest correlation with a cancer epithelial reference. Based on that correlation structure we can infer the most likely cell type explained by each of those estimated methylation profiles. We can then label those methylation profiles and their corresponding proportions accordingly.
+
+```{r}
+colnames(stage1_result_4ct$methylation) <- c("CancerEp",
+                                             "Stroma",
+                                             "NormalEp",
+                                             "Immune")
+
+colnames(stage1_result_4ct$proportions) <- colnames(stage1_result_4ct$methylation)
+```
+
+Now let's see how our estimated profiles compare against the true methylation profiles used to build this dataset.
+
+```{r, fig.height=7, fig.width=7}
+# Compute and plot correlation between estimated methylation profiles,
+# and methylation profiles truly used to build the mixtures
+cors_deconv_true_4ct = cor(EDecExampleData::true_cell_type_meth[markers_ovr,],
+                           stage1_result_4ct$methylation[markers_ovr,])
+
+gplots::heatmap.2(cors_deconv_true_4ct,
+                  trace="none",
+                  col=color_gradient(10),
+                  breaks=seq(0,1,0.1),
+                  margins=c(10,12))
+```
+
+See that the cell types we assumed were explained by each of the estimated methylation profiles, based on the comparisons against the references, seem to have been appropriate. Also notice that the cancer immune and normal immune cell types are explained by a single methylation profile in this 4 cell type model, and that the same happens in the case of stroma.
+
+Let's now look more specifically at how well each estimated profile matches against its true counterpart.
+
+```{r, fig.height=7, fig.width=7}
+par(mfrow=c(3,2))
+plot(stage1_result_4ct$methylation[markers_ovr,"CancerEp"],
+     EDecExampleData::true_cell_type_meth[markers_ovr,"CancerEpithelium"],col="steelblue",
+     xlab = "Estimated cancer epithelial",
+     ylab = "True cancer epithelial")
+abline(0,1)
+plot(stage1_result_4ct$methylation[markers_ovr,"NormalEp"],
+     EDecExampleData::true_cell_type_meth[markers_ovr,"NormalEpithelium"],col="steelblue",
+     xlab = "Estimated normal epithelial",
+     ylab = "True normal epithelial")
+abline(0,1)
+plot(stage1_result_4ct$methylation[markers_ovr,"Immune"],
+     EDecExampleData::true_cell_type_meth[markers_ovr,"CancerImmune"],col="steelblue",
+     xlab = "Estimated immune",
+     ylab = "True cancer immune")
+abline(0,1)
+plot(stage1_result_4ct$methylation[markers_ovr,"Immune"],
+     EDecExampleData::true_cell_type_meth[markers_ovr,"NormalImmune"],col="steelblue",
+     xlab = "Estimated immune",
+     ylab = "True normal immune")
+abline(0,1)
+plot(stage1_result_4ct$methylation[markers_ovr,"Stroma"],
+     EDecExampleData::true_cell_type_meth[markers_ovr,"CancerStroma"],col="steelblue",
+     xlab = "Estimated stroma",
+     ylab = "True cancer stroma")
+abline(0,1)
+plot(stage1_result_4ct$methylation[markers_ovr,"Stroma"],
+     EDecExampleData::true_cell_type_meth[markers_ovr,"NormalStroma"],col="steelblue",
+     xlab = "Estimated stroma",
+     ylab = "True normal stroma")
+abline(0,1)
+```
+
+Notice that since the immune profile explains two different cell types (cancer immune and normal immune), its consistency with each of them is not as good as what is observed for the cancer epithelial cell type. The estimated profile falls between those two original profiles. Also notice that the estimated immune profile is more consistent with the cancer immune cell type than with the normal immune cell type. That happens for two reasons. First, there are 200 cancer mixture samples (containing the cancer immune profile), while only 100 mixture samples constaining the normal immune cell type are present. Also, the cancer mixture samples contain a higher proportion of the immune cell type than the normal mixture samples. A similar situation is observed for the stromal cell types. A single stromal methylation profile explains both the cancer stromal and normal stromal cell types. Such profile is therefore a mixture of those two.
+
+Now let's look at the proportions of constituent cell types estimated by EDec.
+
+```{r, fig.height=7, fig.width=7}
+# Create a vector of colors indicating whether a sample represents a
+# tumor or a normal control
+tumor_normal_colors = rep("red",ncol(EDecExampleData::meth_mixtures))
+tumor_normal_colors[grep("Normal",colnames(EDecExampleData::meth_mixtures))] = "green"
+
+# Plot a heat map of proportions of constituent cell types in
+# each sample with a side bar indicating whether the sample is
+# tumor or normal 
+gplots::heatmap.2(stage1_result_4ct$proportions,
+                  trace="none",
+                  col=color_gradient(10),
+                  breaks=seq(0,1,0.1),
+                  margins=c(10,4),
+                  labRow = FALSE,
+                  RowSideColors = tumor_normal_colors)
+```
+
+It looks like the cancer epithelial cell type is present in high proportions in samples representing tumors, but very low proportions in samples representing normal tissue. The oposite is true for the normal epithelial cell type. In terms of the immune cell type, there seem to be a tendency for higher proportion of immune cell type in the cancer samples than in the normal samples, while the oposite trend holds for the stromal cell type.
+
+In the simulated dataset being analyzed here, such observations are just a consequence of how the dataset was created. However, when analyzing real tumor samples, consistency with expected trends of tissue composition in either tumor or normal tissue samples can serve as an initial validation of the deconvolution. Such trends can also be valuable biological observations.
+
+Now let's see how the estimated proportions of constituent cell types relate to the true proportions of cell types used to build the mixture samples. In this example, EDec is not distinguishing between the normal immune and cancer immune cell types, nor between cancer stroma and normal stroma. Therefore, for each sample we will combine the proportions of cancer immune and normal immune into a single immune cell type proportion. The same will be done for the stromal cell types.
+
+```{r, fig.height=7, fig.width=7}
+par(mfrow=c(2,2))
+
+plot(stage1_result_4ct$proportions[,"CancerEp"],
+     EDecExampleData::true_cell_type_props[,"CancerEpithelium"],col="steelblue",
+     xlab = "Estimated cancer epithelial proportion",
+     ylab = "True cancer epithelial proportion")
+abline(0,1)
+
+plot(stage1_result_4ct$proportions[,"NormalEp"],
+     EDecExampleData::true_cell_type_props[,"NormalEpithelium"],col="steelblue",
+     xlab = "Estimated normal epithelial proportion",
+     ylab = "True normal epithelial proportion")
+abline(0,1)
+
+plot(stage1_result_4ct$proportions[,"Immune"],
+     rowSums(EDecExampleData::true_cell_type_props[,c("CancerImmune","NormalImmune")]),
+     col="steelblue",
+     xlab = "Estimated immune proportion",
+     ylab = "True immune proportion")
+abline(0,1)
+
+plot(stage1_result_4ct$proportions[,"Stroma"],
+     rowSums(EDecExampleData::true_cell_type_props[,c("CancerStroma","NormalStroma")]),
+     col="steelblue",
+     xlab = "Estimated stromal proportion",
+     ylab = "True stromal proportion")
+abline(0,1)
+```
+
+The fact that EDec explains the two different types of immune cells with a single methylation profile makes it unable to estimate proportions for each of those individual cell types. However, as can be seen in the image above, it still leads to very accurate estimates of the combined proportion of cancer immune and normal immune cell types. The same is true for the stromal cell types. That observation is important, since it is often the case that the true complexity of the underlying tissue is greater than what EDec can capture. However, if particular cell types have similar methylation profiles to each other over the loci selected for deconvolution, EDec can explain those cell types with a single methylation profile, and lead to accurate estimates of the combined proportions of those cell types. 
+
+### Deconvolution with 3 cell types
+
+```{r, fig.height=7, fig.width=7}
+# Run EDec stage 1 with 3 cell types using the markers_ovr loci
+set.seed(1)
+stage1_result_3ct = 
+  EDec::run_edec_stage_1(meth_bulk_samples = EDecExampleData::meth_mixtures, 
+                         informative_loci = markers_ovr, 
+                         num_cell_types = 3)
+
+# Compute and plot correlation between estimated methylation profiles,
+# and methylation profiles truly used to build the mixtures
+cors_deconv_true_3ct = cor(EDecExampleData::true_cell_type_meth[markers_ovr,],
+                           stage1_result_3ct$methylation[markers_ovr,])
+
+gplots::heatmap.2(cors_deconv_true_3ct,
+                  trace="none",
+                  col=color_gradient(10),
+                  breaks=seq(0,1,0.1),
+                  margins=c(3,12))
+```
+
+Notice that in the model with 3 cell types, there isn't a methylation profile that correlates strongly with any of the stromal cell types. If a cell type is not explained by the model, we don't only miss the oportunity of making specific claim about that cell type, but it can also affect the accuracy of methylation and proportion estimates for other cell types, as is shown in the figure below.
+
+```{r, fig.height=7, fig.width=7}
+par(mfrow=c(3,2))
+
+plot(stage1_result_3ct$proportions[,1],
+     EDecExampleData::true_cell_type_props[,"CancerEpithelium"],col="steelblue",
+     xlab = "Estimated cancer epithelial proportion",
+     ylab = "True cancer epithelial proportion",
+     main = "Cancer epithelial proportions\n3 cell type model")
+abline(0,1)
+
+plot(stage1_result_4ct$proportions[,"CancerEp"],
+     EDecExampleData::true_cell_type_props[,"CancerEpithelium"],col="steelblue",
+     xlab = "Estimated cancer epithelial proportion",
+     ylab = "True cancer epithelial proportion",
+     main = "Cancer epithelial proportions\n4 cell type model")
+abline(0,1)
+
+plot(stage1_result_3ct$proportions[,2],
+     EDecExampleData::true_cell_type_props[,"NormalEpithelium"],col="steelblue",
+     xlab = "Estimated normal epithelial",
+     ylab = "True normal epithelial",
+     main = "Normal epithelial proportions\n3 cell type model")
+abline(0,1)
+
+plot(stage1_result_4ct$proportions[,"NormalEp"],
+     EDecExampleData::true_cell_type_props[,"NormalEpithelium"],col="steelblue",
+     xlab = "Estimated normal epithelial",
+     ylab = "True normal epithelial",
+     main = "Normal epithelial proportions\n4 cell type model")
+abline(0,1)
+
+plot(stage1_result_3ct$proportions[,3],
+     rowSums(EDecExampleData::true_cell_type_props[,c("CancerImmune","NormalImmune")]),
+     col="steelblue",
+     xlab = "Estimated immune proportion",
+     ylab = "True immune proportion",
+     main = "Immune proportions\n3 cell type model")
+abline(0,1)
+plot(stage1_result_4ct$proportions[,"Immune"],
+     rowSums(EDecExampleData::true_cell_type_props[,c("CancerImmune","NormalImmune")]),
+     col="steelblue",
+     xlab = "Estimated immune proportion",
+     ylab = "True immune proportion",
+     main = "Immune proportions\n4 cell type model")
+abline(0,1)
+```
+
+In the figure above we can see that the estimated proportions of normal epithelial and immune cell types in the 3 cell type model became much less accurate than in the 4 cell type model. That is due to the fact the the estimated methylation profiles of those cell types in the 3 cell type model need to also explain the stromal component.
+
+Remember that the use of a model that does not explain the full complexity of the mixture samples only becomes a real issue when cell types present in reasonably high proportions and with very distinct methylation profiles from the other components of the mixture over the set of loci used for analysis remain unexplained. We showed in the 4 cell type model that explaining two cell types with very similar methylation profiles to each other with a single component does not lead to degradation of proportion estimates.
+
+### Deconvolution with 6 cell types
+
+```{r, fig.height=7, fig.width=7}
+# Run EDec stage 1 with 3 cell types using the markers_ovr loci
+set.seed(1)
+stage1_result_6ct = 
+  EDec::run_edec_stage_1(meth_bulk_samples = EDecExampleData::meth_mixtures, 
+                         informative_loci = markers_ovr, 
+                         num_cell_types = 6)
+
+# Compute and plot correlation between estimated methylation profiles,
+# and methylation profiles truly used to build the mixtures
+cors_deconv_true_6ct = cor(EDecExampleData::true_cell_type_meth[markers_ovr,],
+                           stage1_result_6ct$methylation[markers_ovr,])
+
+gplots::heatmap.2(cors_deconv_true_6ct,
+                  trace="none",
+                  col=color_gradient(10),
+                  breaks=seq(0,1,0.1),
+                  margins=c(3,12))
+```
+
+In this example, even though there truly were 6 cell types used to create the dataset, the EDec model with 6 cell types estimates methylation profiles that do not correspond to each of the cell types used to create the model. That happens for two main reasons. First, over the set of loci we selected for analysis, the two immune and the two stromal cell types are very similar to each other. Second, the cancer epithelial cell type has high variability in its methylation profile across samples. Therefore, more of the variance in the dataset is explained by adding a second cancer epithelial cell type profile than by explaining the two types of stromal cells with two distinct profiles. We can also notice that, even though there are two estimated methylation profiles that match the immune cell types, they are not very specific to either of those cell types.
+
+```{r, fig.height=7, fig.width=7}
+par(mfrow=c(3,2))
+
+plot(rowSums(stage1_result_6ct$proportions[,c(3,5)]),
+     EDecExampleData::true_cell_type_props[,"CancerEpithelium"],col="steelblue",
+     xlab = "Estimated cancer epithelial proportion",
+     ylab = "True cancer epithelial proportion")
+abline(0,1)
+
+plot(stage1_result_6ct$proportions[,2],
+     EDecExampleData::true_cell_type_props[,"NormalEpithelium"],col="steelblue",
+     xlab = "Estimated normal epithelial proportion",
+     ylab = "True normal epithelial proportion")
+abline(0,1)
+
+plot(stage1_result_6ct$proportions[,c(6)],
+     EDecExampleData::true_cell_type_props[,"CancerImmune"],
+     col="steelblue",
+     xlab = "Estimated cancer immune proportion",
+     ylab = "True cancer immune proportion")
+abline(0,1)
+
+plot(stage1_result_6ct$proportions[,c(4)],
+     EDecExampleData::true_cell_type_props[,"NormalImmune"],
+     col="steelblue",
+     xlab = "Estimated normal immune proportion",
+     ylab = "True normal immune proportion")
+abline(0,1)
+
+plot(rowSums(stage1_result_6ct$proportions[,c(4,6)]),
+     rowSums(EDecExampleData::true_cell_type_props[,c("CancerImmune","NormalImmune")]),
+     col="steelblue",
+     xlab = "Estimated immune proportion",
+     ylab = "True immune proportion")
+abline(0,1)
+
+plot(stage1_result_6ct$proportions[,1],
+     rowSums(EDecExampleData::true_cell_type_props[,c("CancerStroma","NormalStroma")]),
+     col="steelblue",
+     xlab = "Estimated stromal proportion",
+     ylab = "True stromal proportion")
+abline(0,1)
+```
+
+In the figure above we can see that the estimates of cancer immune and normal immune proportions are not accurate. However, when they are combined into a general immune cell type, the estimates become reasonably accurate. We also notice that the estimated proportions of cancer epithelial cells do not become more accurate in this case compared to the 4 cell type model.
+
+### Choosing a good number of cell types
+
+In this example, where we knew the true methylation profiles and proportions of constituent cell types, it is clear that the model with 4 cell types over the marker loci selected in the first section was most appropriate. However, in real case scenario, the most appropriate choice of number of cell types is not so clear.
+
+In previous applications of EDec, we have found that stability of the model over multiple subsets of the data may be a good indicator of the most appropriate number of cell types. The function \code{estimate_stability}, in the EDec package, will run EDec stage 1 on multiple subsets of the methylation profiles of bulk tissue samples with varying number of cell types. For each number of cell types, it will then compare the estimated methylation profiles and proportions of constituent cell types across all subset of the data. It will then report the number of cell types that gave the most stable estimates of proportions and methylation profiles of constituent cell types.
+
+The code below shows how to run the \code{estimate_stability} function for this example dataset. In that example we will generate 10 randomly chosen subsets of the methylation profiles of mixture samples, each containing 80% of the total number of samples. For each of those subsets, we chose to run EDec stage 1 using between 3 and 6 cell types. Since this function involves running EDec stage 1 multiple times with different numbers of cell types, it takes several minutes to finish, so it will not be automatically run in this vignette.
+
+```{r, eval=FALSE}
+set.seed(1)
+stabilityResult <- EDec::estimate_stability(meth_bulk_samples = EDecExampleData::meth_mixtures, 
+                                            informative_loci = markers_ovr,
+                                            possible_num_ct = 3:6,
+                                            subset_prop = 0.8,
+                                            num_subsets = 10,
+                                            reps_per_subset = 1,
+                                            max_its = 800,
+                                            rss_diff_stop = 1e-8)
+stabilityResult$most_stable_num_ct
+```
+
+If you run the code above, you will notice that the number of cell types that gives the most stable model in this example dataset over the markers_ovr set of informative loci is indeed 4.
+
+## EDec stage 2 - Deconvolution of transcription profiles
+
+As a result of running EDec stage 1 on the methylation profiles of the 300 mixtures of cell types, we obtained accurate estimates of proportions of 4 cell types in each sample. We now would like to use the estimated proportions of constituent cell types to estimate cell type specific gene expression profiles through EDec stage 2. 
+
+We know that 200 of the mixture samples represent "tumors", and 100 represent "normal" samples. We also noticed in the previous section that the proportion of normal epithelial cell type in tumors is very low, and that the same is true for the proportion of cancer epithelial cell type in normal samples. Therefore, for this analysis we will combine the estimated proportions of cancer epithelial and normal epithelial cell types into a single epithelial cell type. Further, we will apply EDec stage 2 separately to the tumor samples and to the normal samples. That will lead to separate estimates of transcription profiles of epithelial, stromal and immune cell types in tumors and in normal samples. Such profiles can then be compared to identify differentially expressed genes between tumor and normal samples in a cell type specific manner.
+
+```{r, fig.height = 7, fig.width = 7}
+# Combine proportions of cancer and normal epithelial cell types
+combined_proportions = cbind(rowSums(stage1_result_4ct$proportions[,c("CancerEp","NormalEp")]),
+                             stage1_result_4ct$proportions[,"Stroma"],
+                             stage1_result_4ct$proportions[,"Immune"])
+colnames(combined_proportions) = c("Epithelial",
+                                   "Stromal",
+                                   "Immune")
+
+# Run EDec stage 2 for tumor samples
+stage2_result_tumors = EDec::run_edec_stage_2(
+                          gene_exp_bulk_samples = EDecExampleData::gene_exp_mixtures[,1:200],
+                          cell_type_props = combined_proportions[1:200,])
+
+# Run EDec stage 2 for normal samples
+stage2_result_normals = EDec::run_edec_stage_2(
+                          gene_exp_bulk_samples = EDecExampleData::gene_exp_mixtures[,201:300],
+                          cell_type_props = combined_proportions[201:300,])
+
+# Plot estimated transcription profiles against the true cell 
+# type specific transcription profiles
+par(mfrow=c(3,2))
+plot(stage2_result_tumors$means[,"Epithelial"],
+     EDecExampleData::true_cell_type_gene_exp[,"CancerEpithelium"],
+     col = "steelblue",
+     xlab = "Estimated epithelial transcription profile in tumors",
+     ylab = "True cancer epithelial transcription profile")
+abline(0,1,lty=2)
+
+plot(stage2_result_normals$means[,"Epithelial"],
+     EDecExampleData::true_cell_type_gene_exp[,"NormalEpithelium"],
+     col = "steelblue",
+     xlab = "Estimated epithelial transcription profile in normal samples",
+     ylab = "True normal epithelial transcription profile")
+abline(0,1,lty=2)
+
+plot(stage2_result_tumors$means[,"Stromal"],
+     EDecExampleData::true_cell_type_gene_exp[,"CancerStroma"],
+     col = "steelblue",
+     xlab = "Estimated stromal transcription profile in tumors",
+     ylab = "True cancer stromal transcription profile")
+abline(0,1,lty=2)
+
+plot(stage2_result_normals$means[,"Stromal"],
+     EDecExampleData::true_cell_type_gene_exp[,"NormalStroma"],
+     col = "steelblue",
+     xlab = "Estimated stromal transcription profile in normal samples",
+     ylab = "True normal stroma transcription profile")
+abline(0,1,lty=2)
+
+plot(stage2_result_tumors$means[,"Immune"],
+     EDecExampleData::true_cell_type_gene_exp[,"CancerImmune"],
+     col = "steelblue",
+     xlab = "Estimated immune transcription profile in tumors",
+     ylab = "True cancer immune transcription profile")
+abline(0,1,lty=2)
+
+plot(stage2_result_normals$means[,"Immune"],
+     EDecExampleData::true_cell_type_gene_exp[,"NormalImmune"],
+     col = "steelblue",
+     xlab = "Estimated immune transcription profile in normal samples",
+     ylab = "True normal immune transcription profile")
+abline(0,1,lty=2)
+```
+
+Notice that the estimated gene expression profiles are highly accurate for all cell types. The immune expression profile in normal samples is the most inaccurate. That happens since the proportion of immune cell type in normal samples is usually small, and the number of normal samples is also lower than that of tumor samples.
